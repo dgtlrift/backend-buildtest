@@ -8,7 +8,6 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::Duration;
 
 use cddlc_codegen::{Backend, CodegenOptions, GeneratedFile};
 use cddlc_ir::lower;
@@ -386,7 +385,7 @@ pub fn build_python(
             );
             if !out.status.success() {
                 let (stdout, stderr) = format_output(&out);
-                let ms = t0.elapsed().as_millis() as u64;
+                let _ms = t0.elapsed().as_millis() as u64;
                 return BuildOutcome::Failed {
                     schema:    schema_name.into(),
                     stdout:    format!("[import {module}]\n{stdout}"),
