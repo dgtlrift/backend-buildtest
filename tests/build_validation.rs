@@ -146,7 +146,7 @@ fn test_dcbor_generates_for_all_schemas() {
 
 // ── Actual build tests (ignored by default, require installed toolchain) ──────
 
-/// Build all schemas using the Rust backend.
+/// Build and test all schemas using the Rust backend (runs `cargo test`).
 /// Requires: cargo in PATH
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_rust -- --ignored --nocapture
 #[test]
@@ -160,7 +160,7 @@ fn test_build_rust() {
     assert_all_ok(&outcomes);
 }
 
-/// Build all schemas using the C backend.
+/// Build and test all schemas using the C backend (cmake build + ctest).
 /// Requires: cmake, cc in PATH
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_c -- --ignored --nocapture
 #[test]
@@ -174,7 +174,7 @@ fn test_build_c() {
     assert_all_ok(&outcomes);
 }
 
-/// Build all schemas using the C++ backend.
+/// Build and test all schemas using the C++ backend (cmake build + ctest).
 /// Requires: cmake, c++ in PATH
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_cpp -- --ignored --nocapture
 #[test]
@@ -188,7 +188,7 @@ fn test_build_cpp() {
     assert_all_ok(&outcomes);
 }
 
-/// Build all schemas using the C# backend.
+/// Build and test all schemas using the C# backend (runs `dotnet test`).
 /// Requires: dotnet in PATH
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_csharp -- --ignored --nocapture
 #[test]
@@ -202,7 +202,7 @@ fn test_build_csharp() {
     assert_all_ok(&outcomes);
 }
 
-/// Build all schemas using the Node.js backend.
+/// Build and test all schemas using the Node.js backend (npm install + tsc + jest).
 /// Requires: npm in PATH
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_nodejs -- --ignored --nocapture
 #[test]
@@ -216,8 +216,8 @@ fn test_build_nodejs() {
     assert_all_ok(&outcomes);
 }
 
-/// Build all schemas using the Python backend.
-/// Requires: python3 in PATH
+/// Build and test all schemas using the Python backend (py_compile + pytest if available).
+/// Requires: python3 in PATH; pytest optional but used when present
 /// Run: cargo test -p backend-buildtest --test build_validation test_build_python -- --ignored --nocapture
 #[test]
 #[ignore]

@@ -166,7 +166,7 @@ pub fn build_rust(
     let t0  = std::time::Instant::now();
     let out = run_cmd(
         Command::new("cargo")
-            .arg("build")
+            .arg("test")
             .current_dir(&crate_dir)
             .env("CARGO_NET_OFFLINE", "false")
     );
@@ -222,8 +222,24 @@ pub fn build_c(
             .args(["--build", ".", "--parallel"])
             .current_dir(&build_dir)
     );
+    if !build.status.success() {
+        let (stdout, stderr) = format_output(&build);
+        return BuildOutcome::Failed {
+            schema:    schema_name.into(),
+            stdout:    format!("[cmake build]\n{stdout}"),
+            stderr,
+            exit_code: build.status.code(),
+        };
+    }
+
+    // Run tests via CTest
+    let test = run_cmd(
+        Command::new("ctest")
+            .arg("--output-on-failure")
+            .current_dir(&build_dir)
+    );
     let ms = t0.elapsed().as_millis() as u64;
-    build_result(schema_name, build, files.len(), ms)
+    build_result(schema_name, test, files.len(), ms)
 }
 
 // ── C++ build ─────────────────────────────────────────────────────────────────
@@ -258,7 +274,7 @@ pub fn build_csharp(
     let t0  = std::time::Instant::now();
     let out = run_cmd(
         Command::new("dotnet")
-            .arg("build")
+            .arg("test")
             .arg("--nologo")
             .arg("-v").arg("quiet")
             .current_dir(&csproj_dir)
@@ -309,8 +325,24 @@ pub fn build_nodejs(
             .args(["run", "build"])
             .current_dir(&pkg_dir)
     );
+    if !build.status.success() {
+        let (stdout, stderr) = format_output(&build);
+        return BuildOutcome::Failed {
+            schema:    schema_name.into(),
+            stdout:    format!("[npm run build]\n{stdout}"),
+            stderr,
+            exit_code: build.status.code(),
+        };
+    }
+
+    // npm test (Jest + ts-jest)
+    let test = run_cmd(
+        Command::new("npm")
+            .arg("test")
+            .current_dir(&pkg_dir)
+    );
     let ms = t0.elapsed().as_millis() as u64;
-    build_result(schema_name, build, files.len(), ms)
+    build_result(schema_name, test, files.len(), ms)
 }
 
 // ── Python build (syntax check) ───────────────────────────────────────────────
@@ -393,6 +425,32 @@ pub fn build_python(
                     exit_code: out.status.code(),
                 };
             }
+        }
+    }
+
+    // Step 3: run pytest if available
+    let pytest_available = Command::new(&python)
+        .args(["-m", "pytest", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if pytest_available {
+        let src_dir = pkg_dir.join("src");
+        let test = run_cmd(
+            Command::new(&python)
+                .args(["-m", "pytest", "tests/", "-q"])
+                .current_dir(&pkg_dir)
+                .env("PYTHONPATH", &src_dir)
+        );
+        if !test.status.success() {
+            let (stdout, stderr) = format_output(&test);
+            return BuildOutcome::Failed {
+                schema:    schema_name.into(),
+                stdout:    format!("[pytest]\n{stdout}"),
+                stderr,
+                exit_code: test.status.code(),
+            };
         }
     }
 
