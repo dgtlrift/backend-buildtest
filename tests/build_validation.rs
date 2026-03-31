@@ -144,6 +144,159 @@ fn test_dcbor_generates_for_all_schemas() {
     }
 }
 
+// ── CMake / C++ generated content checks (always run, no toolchain needed) ───
+
+/// Generated CMakeLists.txt must use FetchContent_Populate (not MakeAvailable)
+/// so it doesn't try to run nanocbor's Meson-only build system.
+#[test]
+fn test_cmake_uses_fetchcontent_populate() {
+    let opts = CodegenOptions::default();
+    for backend in [
+        ("C",   backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CBackend, &opts).unwrap()),
+        ("C++", backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CppBackend, &opts).unwrap()),
+    ] {
+        let (lang, files) = backend;
+        let cmake = files.iter().find(|f| f.path.ends_with("CMakeLists.txt"))
+            .unwrap_or_else(|| panic!("{lang}: no CMakeLists.txt generated"));
+        assert!(cmake.content.contains("FetchContent_Populate"),
+            "{lang}: CMakeLists.txt must use FetchContent_Populate to fetch nanocbor source");
+        assert!(!cmake.content.contains("FetchContent_MakeAvailable"),
+            "{lang}: CMakeLists.txt must not use FetchContent_MakeAvailable (nanocbor has no CMakeLists.txt)");
+    }
+}
+
+/// Generated CMakeLists.txt must use file(GLOB) to collect nanocbor sources
+/// (the repo has decoder.c + encoder.c, not a single nanocbor.c).
+#[test]
+fn test_cmake_globs_nanocbor_sources() {
+    let opts = CodegenOptions::default();
+    for backend in [
+        ("C",   backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CBackend, &opts).unwrap()),
+        ("C++", backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CppBackend, &opts).unwrap()),
+    ] {
+        let (lang, files) = backend;
+        let cmake = files.iter().find(|f| f.path.ends_with("CMakeLists.txt"))
+            .unwrap_or_else(|| panic!("{lang}: no CMakeLists.txt generated"));
+        assert!(cmake.content.contains("file(GLOB"),
+            "{lang}: CMakeLists.txt must use file(GLOB) to collect nanocbor sources");
+        assert!(!cmake.content.contains("nanocbor.c"),
+            "{lang}: CMakeLists.txt must not reference nanocbor.c by name (repo has decoder.c + encoder.c)");
+    }
+}
+
+/// Generated CMakeLists.txt must explicitly add nanocbor's include dir so
+/// `#include <nanocbor/nanocbor.h>` resolves without relying on target propagation.
+#[test]
+fn test_cmake_includes_nanocbor_headers() {
+    let opts = CodegenOptions::default();
+    for backend in [
+        ("C",   backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CBackend, &opts).unwrap()),
+        ("C++", backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CppBackend, &opts).unwrap()),
+    ] {
+        let (lang, files) = backend;
+        let cmake = files.iter().find(|f| f.path.ends_with("CMakeLists.txt"))
+            .unwrap_or_else(|| panic!("{lang}: no CMakeLists.txt generated"));
+        assert!(cmake.content.contains("nanocbor_SOURCE_DIR}/include"),
+            "{lang}: CMakeLists.txt must add ${{nanocbor_SOURCE_DIR}}/include to target_include_directories");
+    }
+}
+
+/// Generated C++ header must not use `nanocbor_put_tstr_len` (renamed to
+/// `nanocbor_put_tstrn` in current NanoCBOR).
+#[test]
+fn test_cpp_uses_nanocbor_put_tstrn() {
+    let opts = CodegenOptions::default();
+    for (name, src) in SCHEMAS {
+        let files = backend_buildtest::generate_schema(name, src, &CppBackend, &opts).unwrap();
+        let cpp = files.iter().find(|f| f.path.ends_with(".cpp") && f.path.contains("/src/")).unwrap();
+        assert!(!cpp.content.contains("nanocbor_put_tstr_len"),
+            "schema '{name}': .cpp must not use removed nanocbor_put_tstr_len (use nanocbor_put_tstrn)");
+    }
+}
+
+/// Generated C++ source must not call tstr string-enum factory constructors with
+/// zero args (they require the decoded string_view to be passed in).
+#[test]
+fn test_cpp_enum_tstr_decode_passes_value() {
+    let opts = CodegenOptions::default();
+    let src = SCHEMAS.iter().find(|(n, _)| *n == "enums").unwrap().1;
+    let files = backend_buildtest::generate_schema("enums", src, &CppBackend, &opts).unwrap();
+    let cpp = files.iter().find(|f| f.path.ends_with(".cpp") && f.path.contains("/src/")).unwrap();
+    // Each make_Xxx() call in the tstr decode path must pass `sv`, not be empty.
+    // A zero-arg call looks like `make_Ok()` or `make_Warn()`.
+    assert!(!cpp.content.contains("make_Ok()"),    "enums .cpp: make_Ok() must pass the decoded string_view");
+    assert!(!cpp.content.contains("make_Warn()"),  "enums .cpp: make_Warn() must pass the decoded string_view");
+    assert!(!cpp.content.contains("make_Error()"), "enums .cpp: make_Error() must pass the decoded string_view");
+}
+
+/// Generated C++ source for structs with optional fields must compute the map
+/// length at runtime (has_value()) and skip key+value when the field is absent.
+#[test]
+fn test_cpp_optional_fields_dynamic_map_length() {
+    let opts = CodegenOptions::default();
+    let src = SCHEMAS.iter().find(|(n, _)| *n == "structs").unwrap().1;
+    let files = backend_buildtest::generate_schema("structs", src, &CppBackend, &opts).unwrap();
+    let cpp = files.iter().find(|f| f.path.ends_with(".cpp") && f.path.contains("/src/")).unwrap();
+    assert!(cpp.content.contains("has_value()"),
+        "structs .cpp: optional fields must use has_value() for runtime map length and conditional emit");
+}
+
+/// Generated C++ array operator== must not use `!=` on elements (only `==` is
+/// defined on generated structs).
+#[test]
+fn test_cpp_array_operator_eq_no_neq() {
+    let opts = CodegenOptions::default();
+    for (name, src) in SCHEMAS {
+        let files = backend_buildtest::generate_schema(name, src, &CppBackend, &opts).unwrap();
+        let hpp = files.iter().find(|f| f.path.ends_with(".hpp")).unwrap();
+        assert!(!hpp.content.contains("items[i] != o.items[i]"),
+            "schema '{name}': .hpp array operator== must not use != on elements (only operator== is defined)");
+    }
+}
+
+/// Generated C++ size-constrained alias struct must default-initialize its
+/// `value` field to a string of the required length so default-constructed
+/// instances are valid for encode/decode roundtrip.
+#[test]
+fn test_cpp_size_constrained_alias_has_valid_default() {
+    let opts = CodegenOptions::default();
+    let src = SCHEMAS.iter().find(|(n, _)| *n == "aliases").unwrap().1;
+    let files = backend_buildtest::generate_schema("aliases", src, &CppBackend, &opts).unwrap();
+    let hpp = files.iter().find(|f| f.path.ends_with(".hpp")).unwrap();
+    // device-name = tstr .size 32 — default value should be a 32-char string
+    assert!(hpp.content.contains("\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"") ||
+            hpp.content.contains("32)"),
+        "aliases .hpp: DeviceName default value must be a 32-char string to satisfy .size 32 constraint");
+}
+
+/// Generated C++ enum struct must default-initialize `value` to the first
+/// variant's literal string so default-constructed instances encode correctly.
+#[test]
+fn test_cpp_enum_tstr_has_valid_default() {
+    let opts = CodegenOptions::default();
+    let src = SCHEMAS.iter().find(|(n, _)| *n == "enums").unwrap().1;
+    let files = backend_buildtest::generate_schema("enums", src, &CppBackend, &opts).unwrap();
+    let hpp = files.iter().find(|f| f.path.ends_with(".hpp")).unwrap();
+    // status = "ok" / "warn" / "error" — default should hold "ok"
+    assert!(hpp.content.contains("\"ok\""),
+        "enums .hpp: Status default value must hold the first variant string \"ok\"");
+}
+
+/// Generated C++ decode functions must use the container cursor (&map / &arr)
+/// when reading field values inside map and array loops — not the outer `dec`.
+/// A reliable signal: inside a struct decode, field reads go through `&map`.
+#[test]
+fn test_cpp_decode_uses_container_cursor() {
+    let opts = CodegenOptions::default();
+    let src = SCHEMAS.iter().find(|(n, _)| *n == "structs").unwrap().1;
+    let files = backend_buildtest::generate_schema("structs", src, &CppBackend, &opts).unwrap();
+    let cpp = files.iter().find(|f| f.path.ends_with(".cpp") && f.path.contains("/src/")).unwrap();
+    // decode(dec, ...) inside a map would read from the outer cursor — wrong.
+    // All field decodes inside a map must pass &map.
+    assert!(cpp.content.contains("decode(&map,"),
+        "structs .cpp: named-type field decode inside a map must pass &map, not dec");
+}
+
 // ── Actual build tests (ignored by default, require installed toolchain) ──────
 
 /// Build and test all schemas using the Rust backend (runs `cargo test`).
