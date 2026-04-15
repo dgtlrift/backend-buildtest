@@ -214,6 +214,19 @@ fn test_cpp_uses_nanocbor_put_tstrn() {
     }
 }
 
+/// Generated C source must not use `nanocbor_put_tstr_len` (renamed to
+/// `nanocbor_put_tstrn` in current NanoCBOR).
+#[test]
+fn test_c_uses_nanocbor_put_tstrn() {
+    let opts = CodegenOptions::default();
+    for (name, src) in SCHEMAS {
+        let files = backend_buildtest::generate_schema(name, src, &CBackend, &opts).unwrap();
+        let c_src = files.iter().find(|f| f.path.ends_with(".c") && f.path.contains("/src/")).unwrap();
+        assert!(!c_src.content.contains("nanocbor_put_tstr_len"),
+            "schema '{name}': .c must not use removed nanocbor_put_tstr_len (use nanocbor_put_tstrn)");
+    }
+}
+
 /// Generated C++ source must not call tstr string-enum factory constructors with
 /// zero args (they require the decoded string_view to be passed in).
 #[test]
