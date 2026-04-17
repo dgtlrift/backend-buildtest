@@ -146,10 +146,10 @@ fn test_dcbor_generates_for_all_schemas() {
 
 // ── CMake / C++ generated content checks (always run, no toolchain needed) ───
 
-/// Generated CMakeLists.txt must use FetchContent_Populate (not MakeAvailable)
-/// so it doesn't try to run nanocbor's Meson-only build system.
+/// Generated CMakeLists.txt must use FetchContent_MakeAvailable (not the
+/// deprecated FetchContent_Populate) to fetch and build nanocbor.
 #[test]
-fn test_cmake_uses_fetchcontent_populate() {
+fn test_cmake_uses_fetchcontent_make_available() {
     let opts = CodegenOptions::default();
     for backend in [
         ("C",   backend_buildtest::generate_schema("structs", SCHEMAS.iter().find(|(n,_)| *n == "structs").unwrap().1, &CBackend, &opts).unwrap()),
@@ -158,15 +158,15 @@ fn test_cmake_uses_fetchcontent_populate() {
         let (lang, files) = backend;
         let cmake = files.iter().find(|f| f.path.ends_with("CMakeLists.txt"))
             .unwrap_or_else(|| panic!("{lang}: no CMakeLists.txt generated"));
-        assert!(cmake.content.contains("FetchContent_Populate"),
-            "{lang}: CMakeLists.txt must use FetchContent_Populate to fetch nanocbor source");
-        assert!(!cmake.content.contains("FetchContent_MakeAvailable"),
-            "{lang}: CMakeLists.txt must not use FetchContent_MakeAvailable (nanocbor has no CMakeLists.txt)");
+        assert!(cmake.content.contains("FetchContent_MakeAvailable"),
+            "{lang}: CMakeLists.txt must use FetchContent_MakeAvailable to fetch nanocbor");
+        assert!(!cmake.content.contains("FetchContent_Populate"),
+            "{lang}: CMakeLists.txt must not use the deprecated FetchContent_Populate");
     }
 }
 
-/// Generated CMakeLists.txt must use file(GLOB) to collect nanocbor sources
-/// (the repo has decoder.c + encoder.c, not a single nanocbor.c).
+/// Generated CMakeLists.txt must use file(GLOB) to compile nanocbor sources
+/// directly (the nanocbor CMake target is not reliably built in all environments).
 #[test]
 fn test_cmake_globs_nanocbor_sources() {
     let opts = CodegenOptions::default();
@@ -180,12 +180,12 @@ fn test_cmake_globs_nanocbor_sources() {
         assert!(cmake.content.contains("file(GLOB"),
             "{lang}: CMakeLists.txt must use file(GLOB) to collect nanocbor sources");
         assert!(!cmake.content.contains("nanocbor.c"),
-            "{lang}: CMakeLists.txt must not reference nanocbor.c by name (repo has decoder.c + encoder.c)");
+            "{lang}: CMakeLists.txt must not reference nanocbor.c by name");
     }
 }
 
 /// Generated CMakeLists.txt must explicitly add nanocbor's include dir so
-/// `#include <nanocbor/nanocbor.h>` resolves without relying on target propagation.
+/// `#include <nanocbor/nanocbor.h>` resolves during compilation of our sources.
 #[test]
 fn test_cmake_includes_nanocbor_headers() {
     let opts = CodegenOptions::default();
