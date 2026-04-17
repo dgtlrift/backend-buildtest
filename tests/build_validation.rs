@@ -48,7 +48,7 @@ fn test_all_schemas_generate_c() {
     for (name, src) in SCHEMAS {
         let files = backend_buildtest::generate_schema(name, src, &CBackend, &opts)
             .unwrap_or_else(|e| panic!("schema '{name}' failed: {e}"));
-        assert_eq!(files.len(), 4, "schema '{name}': expected 4 files");
+        assert_eq!(files.len(), 5, "schema '{name}': expected 5 files");
     }
 }
 
@@ -58,7 +58,7 @@ fn test_all_schemas_generate_cpp() {
     for (name, src) in SCHEMAS {
         let files = backend_buildtest::generate_schema(name, src, &CppBackend, &opts)
             .unwrap_or_else(|e| panic!("schema '{name}' failed: {e}"));
-        assert_eq!(files.len(), 4, "schema '{name}': expected 4 files");
+        assert_eq!(files.len(), 5, "schema '{name}': expected 5 files");
     }
 }
 
